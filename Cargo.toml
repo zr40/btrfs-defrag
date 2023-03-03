@@ -1,0 +1,17 @@
+[package]
+name = "btrfs-defrag"
+version = "0.0.0"
+edition = "2021"
+authors = ["Matthijs van der Vleuten"]
+description = "Userspace file defragmentation utility for btrfs"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+anyhow = "1.0.69"
+clap = {version = "4.1.8", features = ['derive']}
+nix = {version = "0.26.2", features = ['fs']}
+
+[profile.release]
+lto = true
+codegen-units = 1
+split-debuginfo = "packed"
