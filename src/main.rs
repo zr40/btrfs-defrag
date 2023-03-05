@@ -3,16 +3,16 @@
 #![warn(clippy::pedantic)]
 #![allow(clippy::similar_names)]
 
-use std::fs::{canonicalize, remove_file, OpenOptions};
+use std::fs::{canonicalize, OpenOptions};
 use std::io::{copy, Seek, SeekFrom};
 use std::os::fd::AsRawFd;
 use std::os::unix::prelude::OpenOptionsExt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 use nix::fcntl::{fallocate, FallocateFlags};
-use nix::libc::{O_NOFOLLOW, S_IFMT, S_IFREG};
+use nix::libc::{O_EXCL, O_NOFOLLOW, O_TMPFILE, S_IFMT, S_IFREG};
 use nix::sys::stat::fstat;
 use nix::sys::statfs::{fstatfs, BTRFS_SUPER_MAGIC};
 use nix::unistd::fsync;
@@ -54,19 +54,15 @@ fn defrag(path: &PathBuf) -> Result<()> {
         bail!("'{}' is not a regular file", path.display());
     }
 
-    // Create the workfile in the same directory as the file to be defragmented.
+    // Create the work file in the same subvolume as the file to be defragmented.
     let realpath = canonicalize(path)?;
     let dirpath = realpath.as_path().parent().unwrap();
-    let workfile_path = Path::join(dirpath, format!(".defrag.{}", file_stat.st_ino));
     let mut workfile = OpenOptions::new()
         .read(true)
         .write(true)
-        .create_new(true)
-        .open(&workfile_path)?;
-
-    // We don't actually need the workfile linked at any point, we only need the fd.
-    // So unlink it right away.
-    remove_file(&workfile_path)?;
+        .custom_flags(O_TMPFILE | O_EXCL)
+        .open(dirpath)
+        .context("could not create work file")?;
 
     let workfile_fd = workfile.as_raw_fd();
 
